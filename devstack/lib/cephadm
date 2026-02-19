@@ -447,7 +447,7 @@ function configure_rgw_ceph_section {
     # RGW KEYSTONE KEYS
     declare -A RGW_CONFIG_KEYS
 
-    RGW_CONFIG_KEYS=(['rgw_keystone_api_version']=3
+    RGW_CONFIG_KEYS=(
         ['rgw_keystone_url']="$KEYSTONE_SERVICE_URI"
         ['rgw_keystone_accepted_roles']="member, _member_, Member, admin"
         ['rgw_keystone_accepted_admin_roles']="ResellerAdmin"
@@ -497,7 +497,7 @@ function rgw {
     configure_ceph_embedded_rgw
 
     $SUDO "$CEPHADM" shell --fsid $FSID --config $CEPH_CONFIG \
-        --keyring $CEPH_KEYRING -- ceph orch apply rgw default default default default \
+        --keyring $CEPH_KEYRING -- ceph orch apply rgw default default \
         "--placement=$HOSTNAME count:1" --port "$RGW_PORT"
 
     configure_rgw_ceph_section
