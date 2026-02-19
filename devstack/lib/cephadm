@@ -447,7 +447,7 @@ function configure_rgw_ceph_section {
     # RGW KEYSTONE KEYS
     declare -A RGW_CONFIG_KEYS
 
-    RGW_CONFIG_KEYS=(['rgw_keystone_api_version']=3
+    RGW_CONFIG_KEYS=(
         ['rgw_keystone_url']="$KEYSTONE_SERVICE_URI"
         ['rgw_keystone_accepted_roles']="member, _member_, Member, admin"
         ['rgw_keystone_accepted_admin_roles']="ResellerAdmin"
