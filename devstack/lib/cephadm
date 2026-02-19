@@ -483,6 +483,13 @@ function configure_rgw_ceph_section {
         ['rgw_max_attr_size']=256
     )
 
+    # Ceph 20 doesn't recognize the config option "rgw_keystone_api_version" anymore.
+    # Ceph 18 and 19 require "rgw_keystone_api_version" option to be set to 3 to work with keystone v3.
+    ceph_release=$(_get_ceph_codename)
+    if [[ "${ceph_release}" == "squid" || "${ceph_release}" == "reef" ]]; then
+        RGW_CONFIG_KEYS['rgw_keystone_api_version']=3
+    fi
+
     for k in ${!RGW_CONFIG_KEYS[@]}; do
         set_config_key "global" ${k} ${RGW_CONFIG_KEYS[$k]}
     done
