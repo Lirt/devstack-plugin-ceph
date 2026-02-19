@@ -497,7 +497,7 @@ function rgw {
     configure_ceph_embedded_rgw
 
     $SUDO "$CEPHADM" shell --fsid $FSID --config $CEPH_CONFIG \
-        --keyring $CEPH_KEYRING -- ceph orch apply rgw default default default default \
+        --keyring $CEPH_KEYRING -- ceph orch apply rgw default default \
         "--placement=$HOSTNAME count:1" --port "$RGW_PORT"
 
     configure_rgw_ceph_section
