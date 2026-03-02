@@ -473,6 +473,11 @@ function configure_rgw_ceph_section {
     for k in ${!RGW_CONFIG_KEYS[@]}; do
         set_config_key "global" ${k} ${RGW_CONFIG_KEYS[$k]}
     done
+
+    # Restart rgw to apply the new config
+    sudo ceph orch restart rgw.default
+    # Wait for the rgw to be up and running before returning
+    sleep "10"
 }
 
 # Deploy rbd-mirror on the current site
