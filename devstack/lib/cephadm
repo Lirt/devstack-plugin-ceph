@@ -461,7 +461,9 @@ function configure_rgw_ceph_section {
         ['rgw_keystone_implicit_tenants']="true"
         ['rgw_swift_versioning_enabled']="true"
         ['rgw_swift_enforce_content_length']="true"
-        ['rgw_swift_account_in_url']="true"
+        # rgw_swift_account_in_url is set to false so that the endpoint created in keystone doesn't need to have {account/project-id} in the URL.
+        # ref: https://docs.ceph.com/en/reef/radosgw/config-ref/#confval-rgw_swift_account_in_url
+        ['rgw_swift_account_in_url']="false"
         ['rgw_trust_forwarded_https']="true"
         ['rgw_max_attr_name_len']=128
         ['rgw_max_attrs_num_in_req']=90
