@@ -407,7 +407,7 @@ function _create_swift_endpoint {
     swift_service=$(get_or_create_service "swift" "object-store" "Swift Service")
 
     local swift_endpoint
-    swift_endpoint="$SWIFT_SERVICE_PROTOCOL://$SERVICE_HOST:${CEPH_RGW_PORT}/swift/v1"
+    swift_endpoint="$SWIFT_SERVICE_PROTOCOL://$SERVICE_HOST:${CEPH_RGW_PORT}/swift/v1/AUTH_%(project_id)s"
 
     get_or_create_endpoint $swift_service \
         "$REGION_NAME" $swift_endpoint $swift_endpoint $swift_endpoint
@@ -463,7 +463,7 @@ function configure_rgw_ceph_section {
         ['rgw_swift_enforce_content_length']="true"
         # rgw_swift_account_in_url is set to false so that the endpoint created in keystone doesn't need to have {account/project-id} in the URL.
         # ref: https://docs.ceph.com/en/reef/radosgw/config-ref/#confval-rgw_swift_account_in_url
-        ['rgw_swift_account_in_url']="false"
+        ['rgw_swift_account_in_url']="true"
         ['rgw_trust_forwarded_https']="true"
         ['rgw_max_attr_name_len']=128
         ['rgw_max_attrs_num_in_req']=90
