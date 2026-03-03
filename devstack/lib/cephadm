@@ -18,7 +18,6 @@ XTRACE=$(set +o | grep xtrace)
 set +o xtrace
 
 # GENERIC CEPHADM INTERNAL OPTIONS, DO NOT EDIT
-CEPH_RELEASE=${CEPH_RELEASE:-tentacle}
 CEPH_PUB_KEY="/etc/ceph/ceph.pub"
 CEPH_CONFIG="/etc/ceph/ceph.conf"
 BOOTSTRAP_CONFIG="$HOME/bootstrap_ceph.conf"
@@ -171,7 +170,8 @@ function get_cephadm {
     # equivalent being published by the ceph community.
     os_release="el9"
     ceph_version=$(_get_ceph_version)
-    case $CEPH_RELEASE in
+    ceph_release=$(_get_ceph_codename)
+    case $ceph_release in
         pacific|octopus)
             os_release="el8";;
     esac
@@ -361,6 +361,16 @@ function _get_ceph_version {
 
     ceph_version_str=$(sudo podman run --rm --entrypoint ceph $CONTAINER_IMAGE \
         --version | awk '{ print $3 }')
+
+    echo $ceph_version_str
+}
+
+# Get Ceph release codename
+function _get_ceph_codename {
+    local ceph_version_str
+
+    ceph_version_str=$(sudo podman run --rm --entrypoint ceph $CONTAINER_IMAGE \
+        --version | awk '{ print $5 }')
 
     echo $ceph_version_str
 }
