@@ -70,6 +70,32 @@ in the ``local.conf`` file.
 
 -  Then run ``stack.sh`` and wait for the *magic* to happen :)
 
+Setup With Rados Gateway
+------------------------
+
+To setup Ceph with Rados Gateway and configure it as a Swift endpoint, you will need to enable following 2 settings in your ``local.conf`` in addition to the settings mentioned in the previous section:
+
+::
+
+    ENABLE_CEPH_RGW=True
+    CEPH_RGW_PORT="8080"
+
+Ceph requires passwordless SSH access to the root user on the machine to deploy Rados Gateway using ``ceph orch apply rgw`` command.
+After you created stack user using `sudo ./tools/create-stack-user.sh` you can run following to create passwordless SSH access for the root user on localhost.
+Be aware that this will allow root login over SSH which is considered unsafe if your machine is reachable from the Internet or other public networks.
+
+::
+
+    # Uncomment and change PermitRootLogin to yes in sshd_config.
+    sudo sed -i 's/PermitRootLogin no/PermitRootLogin yes/g' /etc/ssh/sshd_config
+    mkdir -p /opt/stack/.ssh
+    ssh-keygen -t rsa -N "" -f ~/.ssh/id_rsa
+    sudo sh -c 'cat /opt/stack/.ssh/id_rsa.pub >> /root/.ssh/authorized_keys'
+    ssh root@localhost 'echo "SSH to localhost works."'
+
+For a full example, please see file ``./examples/ceph-with-rgw-local.conf`` in this repository.
+
+
 Known Issues / Limitations
 --------------------------
 
