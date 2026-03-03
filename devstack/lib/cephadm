@@ -28,7 +28,7 @@ DISABLE_CEPHADM_POST_DEPLOY=${DISABLE_CEPHADM_POST_DEPLOY:-False}
 
 # DEFAULT OPTIONS
 ATTEMPTS=30
-CONTAINER_IMAGE=${CONTAINER_IMAGE:-'quay.io/ceph/ceph:v20'}
+CEPH_CONTAINER_IMAGE=${CEPH_CONTAINER_IMAGE:-'quay.io/ceph/ceph:v20'}
 DEVICES=()
 if [[ "$REMOTE_CEPH" = "False" ]]; then
     FSID=$(uuidgen)
@@ -110,24 +110,24 @@ NOVA_CEPH_POOL=${NOVA_CEPH_POOL:-vms}
 function set_debug {
     if [ "$DEBUG" -eq 1 ]; then
         echo "[CEPHADM] Enabling Debug mode"
-        $SUDO "$CEPHADM" shell --fsid $FSID --config $CEPH_CONFIG \
+        $SUDO "$CEPHADM" --image ${CEPH_CONTAINER_IMAGE} shell --fsid $FSID --config $CEPH_CONFIG \
             --keyring $CEPH_KEYRING -- ceph config set mgr mgr/cephadm/log_to_cluster_level debug
         echo "[CEPHADM] See debug logs running: ceph -W cephadm --watch-debug"
     fi
 }
 
 function enable_verbose_mds_logging {
-    $SUDO "$CEPHADM" shell --fsid $FSID --config $CEPH_CONFIG \
+    $SUDO "$CEPHADM" --image ${CEPH_CONTAINER_IMAGE} shell --fsid $FSID --config $CEPH_CONFIG \
         --keyring $CEPH_KEYRING -- ceph config set mds debug_mds 20
-    $SUDO "$CEPHADM" shell --fsid $FSID --config $CEPH_CONFIG \
+    $SUDO "$CEPHADM" --image ${CEPH_CONTAINER_IMAGE} shell --fsid $FSID --config $CEPH_CONFIG \
         --keyring $CEPH_KEYRING -- ceph config set mds debug_ms 20
-    $SUDO "$CEPHADM" shell --fsid $FSID --config $CEPH_CONFIG \
+    $SUDO "$CEPHADM" --image ${CEPH_CONTAINER_IMAGE} shell --fsid $FSID --config $CEPH_CONFIG \
         --keyring $CEPH_KEYRING -- ceph config set mds debug_client 20
-    $SUDO "$CEPHADM" shell --fsid $FSID --config $CEPH_CONFIG \
+    $SUDO "$CEPHADM" --image ${CEPH_CONTAINER_IMAGE} shell --fsid $FSID --config $CEPH_CONFIG \
         --keyring $CEPH_KEYRING -- ceph config set mds log_to_file true
-    $SUDO "$CEPHADM" shell --fsid $FSID --config $CEPH_CONFIG \
+    $SUDO "$CEPHADM" --image ${CEPH_CONTAINER_IMAGE} shell --fsid $FSID --config $CEPH_CONFIG \
         --keyring $CEPH_KEYRING -- ceph config set global mon_cluster_log_to_file true
-    $SUDO "$CEPHADM" shell --fsid $FSID --config $CEPH_CONFIG \
+    $SUDO "$CEPHADM" --image ${CEPH_CONTAINER_IMAGE} shell --fsid $FSID --config $CEPH_CONFIG \
         --keyring $CEPH_KEYRING -- ceph config set global log_to_file true
     touch "$MDS_LOG_FILE"
     cat <<EOF > "$MDS_LOG_FILE"
@@ -137,7 +137,7 @@ LOG {
  }
 }
 EOF
-    $SUDO "$CEPHADM" shell --fsid $FSID --config $CEPH_CONFIG \
+    $SUDO "$CEPHADM" --image ${CEPH_CONTAINER_IMAGE} shell --fsid $FSID --config $CEPH_CONFIG \
         --keyring $CEPH_KEYRING -m $MDS_LOG_FILE -- ceph nfs cluster config set "$FSNAME" \
         -i /mnt/mds_log.conf
 
@@ -145,13 +145,13 @@ EOF
 
 # Admin: check ceph cluster status
 function check_cluster_status {
-    $SUDO "$CEPHADM" shell --fsid $FSID --config $CEPH_CONFIG \
+    $SUDO "$CEPHADM" --image ${CEPH_CONTAINER_IMAGE} shell --fsid $FSID --config $CEPH_CONFIG \
         --keyring $CEPH_KEYRING -- ceph -s -f json-pretty
 }
 
 # Admin: export ceph cluster config spec
 function export_spec {
-    $SUDO "$CEPHADM" shell --fsid $FSID --config $CEPH_CONFIG \
+    $SUDO "$CEPHADM" --image ${CEPH_CONTAINER_IMAGE} shell --fsid $FSID --config $CEPH_CONFIG \
         --keyring $CEPH_KEYRING -- ceph orch ls --export > "$EXPORT"
     echo "Ceph cluster config exported: $EXPORT"
 }
@@ -169,14 +169,12 @@ function get_cephadm {
     # $os_PACKAGE ("rpm") doesn't really matter. There is no ubuntu/debian
     # equivalent being published by the ceph community.
     os_release="el9"
-    ceph_version=$(_get_ceph_version)
-    ceph_release=$(_get_ceph_codename)
-    case $ceph_release in
+    case $CEPH_RELEASE in
         pacific|octopus)
             os_release="el8";;
     esac
-    curl -f -O https://download.ceph.com/rpm-${ceph_version}/${os_release}/noarch/cephadm
-    $SUDO mv cephadm $TARGET_BIN
+    curl -f -O https://download.ceph.com/rpm-${CEPH_VERSION}/${os_release}/noarch/cephadm
+    $SUDO mv cephadm $TARGET_BIN/cephadm
     $SUDO chmod +x $TARGET_BIN/cephadm
     echo "[GET CEPHADM] cephadm is now available"
 
@@ -207,8 +205,18 @@ EOF
 # Install ceph: run cephadm bootstrap
 function start_ceph {
     cluster=$(sudo cephadm ls | jq '.[]' | jq 'select(.name | test("^mon*")).fsid')
+
+    local version_dependent_args=""
+    if [ "${CEPH_RELEASE}" == "octopus" ]; then
+        # Older ceph versions use shebang /usr/libexec/platform-python which
+        # doesn't exist in the modern operating systems anymore.
+        sudo ln -sf /usr/bin/python3 /usr/libexec/platform-python
+    else
+        version_dependent_args="--single-host-defaults"
+    fi
+
     if [ -z "$cluster" ]; then
-        $SUDO "$CEPHADM" --image "$CONTAINER_IMAGE" \
+        $SUDO "$CEPHADM" --image "$CEPH_CONTAINER_IMAGE" \
             bootstrap \
             --fsid $FSID \
             --config "$BOOTSTRAP_CONFIG" \
@@ -219,10 +227,10 @@ function start_ceph {
             --allow-fqdn-hostname \
             --skip-monitoring-stack \
             --skip-dashboard \
-            --single-host-defaults \
             --skip-firewalld \
             --skip-mon-network \
-            --mon-ip "$HOST_IP"
+            --mon-ip "$HOST_IP" \
+            $version_dependent_args
 
         test -e $CEPH_CONFIG
         test -e $CEPH_KEYRING
@@ -266,17 +274,17 @@ function add_osds {
     # let's add some osds
     if [ -z "$DEVICES" ]; then
         echo "Using ALL available devices"
-        $SUDO "$CEPHADM" shell ceph orch apply osd --all-available-devices
+        $SUDO "$CEPHADM" --image ${CEPH_CONTAINER_IMAGE} shell ceph orch apply osd --all-available-devices
     else
         for item in "${DEVICES[@]}"; do
             echo "Creating osd $item on node $HOSTNAME"
-            $SUDO "$CEPHADM" shell --fsid $FSID --config $CEPH_CONFIG \
+            $SUDO "$CEPHADM" --image ${CEPH_CONTAINER_IMAGE} shell --fsid $FSID --config $CEPH_CONFIG \
                 --keyring $CEPH_KEYRING -- ceph orch daemon add osd "$HOSTNAME:$item"
         done
     fi
 
     while [ "$ATTEMPTS" -ne 0 ]; do
-        num_osds=$($SUDO "$CEPHADM" shell --fsid $FSID --config $CEPH_CONFIG \
+        num_osds=$($SUDO "$CEPHADM" --image ${CEPH_CONTAINER_IMAGE} shell --fsid $FSID --config $CEPH_CONFIG \
             --keyring $CEPH_KEYRING -- ceph -s -f json | jq '.osdmap | .num_up_osds')
         if [ "$num_osds" -ge "$MIN_OSDS" ]; then
             break;
@@ -295,12 +303,12 @@ function add_pools {
     [ "${#POOLS[@]}" -eq 0 ] && return;
 
     for pool in "${POOLS[@]}"; do
-        $SUDO "$CEPHADM" shell --fsid $FSID --config $CEPH_CONFIG \
+        $SUDO "$CEPHADM" --image ${CEPH_CONTAINER_IMAGE} shell --fsid $FSID --config $CEPH_CONFIG \
             --keyring $CEPH_KEYRING -- ceph osd pool create "$pool" "$DEFAULT_PG_NUM" \
             "$DEFAULT_PGP_NUM" replicated --autoscale-mode on
 
         # set the application to the pool (which also means rbd init the pool)
-        $SUDO "$CEPHADM" shell --fsid $FSID --config $CEPH_CONFIG \
+        $SUDO "$CEPHADM" --image ${CEPH_CONTAINER_IMAGE} shell --fsid $FSID --config $CEPH_CONFIG \
             --keyring $CEPH_KEYRING -- ceph osd pool application enable "$pool" rbd
     done
 }
@@ -328,7 +336,7 @@ function _create_key {
         osd_caps="allow class-read object_prefix rbd_children, $caps"
     fi
 
-    $SUDO "$CEPHADM" shell -v "$KEY_EXPORT_DIR:$KEY_EXPORT_DIR" --fsid $FSID --config $CEPH_CONFIG \
+    $SUDO "$CEPHADM" --image ${CEPH_CONTAINER_IMAGE} shell -m ${KEY_EXPORT_DIR}:${KEY_EXPORT_DIR} --fsid $FSID --config $CEPH_CONFIG \
         --keyring $CEPH_KEYRING -- ceph auth get-or-create "$name" mgr "allow rw" mon "allow r" osd "$osd_caps" \
         -o "$KEY_EXPORT_DIR/ceph.$name.keyring"
 
@@ -351,7 +359,7 @@ function cephfs_config {
     # - cephfs.$FSNAME.data
     # - cephfs.$FSNAME.meta
     # and the mds daemon is deployed
-    $SUDO "$CEPHADM" shell --fsid $FSID --config $CEPH_CONFIG \
+    $SUDO "$CEPHADM" --image ${CEPH_CONTAINER_IMAGE} shell --fsid $FSID --config $CEPH_CONFIG \
         --keyring $CEPH_KEYRING -- ceph fs volume create "$FSNAME"
 }
 
@@ -359,7 +367,7 @@ function cephfs_config {
 function _get_ceph_version {
     local ceph_version_str
 
-    ceph_version_str=$(sudo podman run --rm --entrypoint ceph $CONTAINER_IMAGE \
+    ceph_version_str=$(sudo podman run --rm --entrypoint ceph $CEPH_CONTAINER_IMAGE \
         --version | awk '{ print $3 }')
 
     echo $ceph_version_str
@@ -369,26 +377,23 @@ function _get_ceph_version {
 function _get_ceph_codename {
     local ceph_version_str
 
-    ceph_version_str=$(sudo podman run --rm --entrypoint ceph $CONTAINER_IMAGE \
+    ceph_version_str=$(sudo podman run --rm --entrypoint ceph $CEPH_CONTAINER_IMAGE \
         --version | awk '{ print $5 }')
 
     echo $ceph_version_str
 }
 
 function _install_and_configure_clustered_nfs {
-    local ceph_version
-    ceph_version=$(_get_ceph_version)
-
     echo "[CEPHADM] Deploy nfs.$FSNAME backend"
-    if [[ "${ceph_version%%\.*}" -ge 18 && $ENABLE_INGRESS == "True" ]]; then
-        $SUDO "$CEPHADM" shell --fsid $FSID --config $CEPH_CONFIG \
+    if [[ "${CEPH_VERSION%%\.*}" -ge 18 && $ENABLE_INGRESS == "True" ]]; then
+        $SUDO "$CEPHADM" --image ${CEPH_CONTAINER_IMAGE} shell --fsid $FSID --config $CEPH_CONFIG \
             --keyring $CEPH_KEYRING -- ceph nfs cluster create \
             "$FSNAME" "$HOSTNAME" --port $NFS_PORT --ingress \
             --ingress-mode haproxy-protocol --virtual_ip $VIP
     else
         echo "[CEPHADM] Ingress service is not deployed \
         to preserve the ability to apply client restrictions."
-        $SUDO "$CEPHADM" shell --fsid $FSID --config $CEPH_CONFIG \
+        $SUDO "$CEPHADM" --image ${CEPH_CONTAINER_IMAGE} shell --fsid $FSID --config $CEPH_CONFIG \
             --keyring $CEPH_KEYRING -- ceph nfs cluster create \
             "$FSNAME" "$HOSTNAME" --port $NFS_PORT
     fi
@@ -448,7 +453,7 @@ function set_config_key {
     local section=$1
     local key=$2
     local value=$3
-    $SUDO "$CEPHADM" shell --fsid $FSID --config $CEPH_CONFIG \
+    $SUDO "$CEPHADM" --image ${CEPH_CONTAINER_IMAGE} shell --fsid $FSID --config $CEPH_CONFIG \
         ceph config set ${section} ${key} ${value}
 }
 
@@ -478,12 +483,17 @@ function configure_rgw_ceph_section {
         ['rgw_max_attr_size']=256
     )
 
+    if [ "${CEPH_RELEASE}" == "octopus" ]; then
+        RGW_CONFIG_KEYS['rgw_keystone_api_version']=3
+    fi
+
     for k in ${!RGW_CONFIG_KEYS[@]}; do
         set_config_key "global" ${k} ${RGW_CONFIG_KEYS[$k]}
     done
 
     # Restart rgw to apply the new config
-    sudo ceph orch restart rgw.default
+    rgw_orch_name=$(sudo ceph orch ls | grep rgw | awk '{print $1}')
+    sudo ceph orch restart "${rgw_orch_name}"
     # Wait for the rgw to be up and running before returning
     sleep "10"
 }
@@ -503,7 +513,7 @@ function configure_rgw_ceph_section {
 
 function rbd_mirror {
 
-    $SUDO "$CEPHADM" shell --fsid "$FSID" --config "$CEPH_CONFIG" \
+    $SUDO "$CEPHADM" --image ${CEPH_CONTAINER_IMAGE} shell --fsid "$FSID" --config "$CEPH_CONFIG" \
         --keyring $CEPH_KEYRING -- ceph orch apply rbd-mirror \
         "--placement=$HOSTNAME count:1"
 }
@@ -512,7 +522,7 @@ function rbd_mirror {
 function rgw {
     configure_ceph_embedded_rgw
 
-    $SUDO "$CEPHADM" shell --fsid $FSID --config $CEPH_CONFIG \
+    $SUDO "$CEPHADM" --image ${CEPH_CONTAINER_IMAGE} shell --fsid $FSID --config $CEPH_CONFIG \
         --keyring $CEPH_KEYRING -- ceph orch apply rgw default default \
         "--placement=$HOSTNAME count:1" --port "$RGW_PORT"
 
@@ -597,6 +607,13 @@ function stop_ceph {
     local cluster_deleted
     local timeout
 
+    local version_dependent_args=""
+    if [ "${CEPH_RELEASE}" == "octopus" ]; then
+        :
+    else
+        version_dependent_args="--zap-osds"
+    fi
+
     if ! [ -x "$CEPHADM" ]; then
         get_cephadm
         CEPHADM=${TARGET_BIN}/cephadm
@@ -605,9 +622,9 @@ function stop_ceph {
     cluster_deleted=0
     timeout=3
     while : ; do
-        CLUSTER_FSID=$(sudo cephadm ls | jq '.[]' | jq 'select(.name | test("^mon*")).fsid' | tr -d \")
+        CLUSTER_FSID=$(${SUDO} "${CEPHADM}" --image ${CEPH_CONTAINER_IMAGE} ls | jq '.[]' | jq 'select(.name | test("^mon*")).fsid' | tr -d \")
         if [[ -n "$CLUSTER_FSID" ]]; then
-            sudo cephadm rm-cluster --zap-osds --fsid $CLUSTER_FSID --force
+            ${SUDO} "${CEPHADM}" rm-cluster --fsid $CLUSTER_FSID --force ${version_dependent_args}
         else
             cluster_deleted=1
             echo "[CEPHADM] Cluster deleted"
@@ -698,15 +715,15 @@ function config_nova {
 
 function set_min_client_version {
     if [ ! -z "$CEPH_MIN_CLIENT_VERSION" ]; then
-        $SUDO "$CEPHADM" shell --fsid $FSID --config $CEPH_CONFIG \
+        $SUDO "$CEPHADM" --image ${CEPH_CONTAINER_IMAGE} shell --fsid $FSID --config $CEPH_CONFIG \
             --keyring $CEPH_KEYRING -- ceph osd set-require-min-compat-client ${CEPH_MIN_CLIENT_VERSION}
     fi
 }
 
 function set_memory_config {
-    $SUDO "$CEPHADM" shell --fsid $FSID --config $CEPH_CONFIG \
+    $SUDO "$CEPHADM" --image ${CEPH_CONTAINER_IMAGE} shell --fsid $FSID --config $CEPH_CONFIG \
         --keyring $CEPH_KEYRING -- ceph config get osd osd_memory_target
-    $SUDO "$CEPHADM" shell --fsid $FSID --config $CEPH_CONFIG \
+    $SUDO "$CEPHADM" --image ${CEPH_CONTAINER_IMAGE} shell --fsid $FSID --config $CEPH_CONFIG \
         --keyring $CEPH_KEYRING -- ceph config set osd osd_memory_target \
         2147483648
 }
@@ -817,10 +834,10 @@ function cleanup_ceph {
 }
 
 function disable_cephadm {
-    $SUDO "$CEPHADM" shell --fsid $FSID --config $CEPH_CONFIG \
+    $SUDO "$CEPHADM" --image ${CEPH_CONTAINER_IMAGE} shell --fsid $FSID --config $CEPH_CONFIG \
         --keyring $CEPH_KEYRING -- ceph orch set backend
 
-    $SUDO "$CEPHADM" shell --fsid $FSID --config $CEPH_CONFIG \
+    $SUDO "$CEPHADM" --image ${CEPH_CONTAINER_IMAGE} shell --fsid $FSID --config $CEPH_CONFIG \
         --keyring $CEPH_KEYRING -- ceph mgr module disable cephadm
 }
 
@@ -841,6 +858,9 @@ function is_ceph_enabled_for_service {
     fi
     return $enabled
 }
+
+CEPH_VERSION=$(_get_ceph_version)
+CEPH_RELEASE=$(_get_ceph_codename)
 
 # Restore xtrace
 $XTRACE
