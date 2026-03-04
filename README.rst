@@ -95,6 +95,24 @@ Be aware that this will allow root login over SSH which is considered unsafe if 
 
 For a full example, please see file ``./examples/ceph-with-rgw-local.conf`` in this repository.
 
+Test With Older Ceph Releases
+-----------------------------
+
+You can build devstack with older versions of ceph releases. Change the version of ceph release by overriding variable ``CEPH_CONTAINER_IMAGE`` in your configuration file.
+
+Supported releases are following:
+
+::
+
+    # Change Ceph Version by changing tag in CEPH_CONTAINER_IMAGE.
+    # Supported versions are:
+    #   octopus: quay.io/ceph/ceph:v15
+    #   pacific: quay.io/ceph/ceph:v16
+    #   quincy: quay.io/ceph/ceph:v17
+    #   reef: quay.io/ceph/ceph:v18
+    #   squid: quay.io/ceph/ceph:v19
+    #   tentacle: quay.io/ceph/ceph:v20
+    CEPH_CONTAINER_IMAGE=quay.io/ceph/ceph:v20
 
 Known Issues / Limitations
 --------------------------
